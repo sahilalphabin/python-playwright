@@ -73,11 +73,13 @@ jobs:
 
           # Case 2: Normal execution (first run)
           echo "Running all Playwright tests"
+          mkdir -p test-results
           pytest tests/ \
             --playwright-json=test-results/report.json \
             --html=test-results/index.html \
             --self-contained-html \
-            -p no:selenium
+            -p no:selenium \
+            -v
 
       - name: Upload test artifacts
         if: always()
@@ -104,7 +106,14 @@ jobs:
           TESTDINO_TOKEN: ${{ secrets.TESTDINO_TOKEN }}
         run: |
           if [ -n "$TESTDINO_TOKEN" ]; then
-            testdino upload test-results --token="$TESTDINO_TOKEN" -v
+            echo "Contents of test-results directory:"
+            ls -la test-results/ || echo "test-results directory not found"
+            if [ -f "test-results/report.json" ]; then
+              echo "Found report.json, uploading..."
+              testdino upload test-results --token="$TESTDINO_TOKEN" -v
+            else
+              echo "No report.json found, skipping upload"
+            fi
           else
             echo "TESTDINO_TOKEN not set, skipping upload"
           fi
