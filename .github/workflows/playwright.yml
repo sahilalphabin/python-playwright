@@ -46,6 +46,16 @@ jobs:
           if [[ "${{ github.run_attempt }}" -gt 1 ]]; then
             echo "Detected re-run. Executing only last failed tests via TestDino."
 
+            if [ -z "$TESTDINO_TOKEN" ]; then
+              echo "TESTDINO_TOKEN not set, running all tests instead"
+              pytest tests/ \
+                --playwright-json=test-results/report.json \
+                --html=test-results/index.html \
+                --self-contained-html \
+                -p no:selenium
+              exit 0
+            fi
+
             FAILED_TESTS=$(testdino last-failed --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }} --token="$TESTDINO_TOKEN" -v)
 
             if [[ -z "$FAILED_TESTS" ]]; then
@@ -81,13 +91,23 @@ jobs:
         if: always()
         env:
           TESTDINO_TOKEN: ${{ secrets.TESTDINO_TOKEN }}
-        run: testdino cache --working-dir test-results --token="$TESTDINO_TOKEN" -v
+        run: |
+          if [ -n "$TESTDINO_TOKEN" ]; then
+            testdino cache --working-dir test-results --token="$TESTDINO_TOKEN" -v
+          else
+            echo "TESTDINO_TOKEN not set, skipping cache"
+          fi
 
       - name: Upload test results to TestDino
         if: always()
         env:
           TESTDINO_TOKEN: ${{ secrets.TESTDINO_TOKEN }}
-        run: testdino upload test-results --token="$TESTDINO_TOKEN" -v
+        run: |
+          if [ -n "$TESTDINO_TOKEN" ]; then
+            testdino upload test-results --token="$TESTDINO_TOKEN" -v
+          else
+            echo "TESTDINO_TOKEN not set, skipping upload"
+          fi
 
   playwright-tests-succeeded:
     name: Check Playwright Tests Status
