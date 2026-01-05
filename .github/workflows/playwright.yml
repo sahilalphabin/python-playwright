@@ -79,7 +79,7 @@ jobs:
           TESTDINO_TOKEN: ${{ secrets.TESTDINO_TOKEN }}
         run: |
           if [ -n "$TESTDINO_TOKEN" ]; then
-            testdino cache --working-dir test-results --token="$TESTDINO_TOKEN" -v
+            testdino cache --working-dir test-results --token="$TESTDINO_TOKEN" --environment="staging" -v
             testdino upload test-results --environment="staging" --token="$TESTDINO_TOKEN" -v
           else
             echo "TESTDINO_TOKEN not set, skipping TestDino integration"
