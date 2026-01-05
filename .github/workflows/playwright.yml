@@ -8,11 +8,8 @@ jobs:
   run-playwright-tests:
     name: Run Playwright Tests
     runs-on: ubuntu-latest
-    container:
-      image: mcr.microsoft.com/playwright:v1.55.0
 
     env:
-      HOME: '/root' # Workaround for Firefox
       TESTDINO_TOKEN: ${{ secrets.TESTDINO_TOKEN }}
       TESTDINO_API_URL: https://malamute-noble-miserably.ngrok-free.app
 
@@ -26,22 +23,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          node-version: "22.x"
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
-          npm install
-          npx playwright install --with-deps chromium
+          python -m pip install --upgrade pip
+          pip install pytest pytest-playwright pytest-playwright-json pytest-html pytest-xdist
+          pip install packages/testdino-1.0.23-py3-none-any.whl
+          playwright install --with-deps chromium
 
       - name: Run Playwright Tests
         shell: bash
         env:
           TESTDINO_TOKEN: ${{ secrets.TESTDINO_TOKEN }}
-          TESTDINO_API_URL: ${{ env.TESTDINO_API_URL }}
-          SHARD_INDEX: ${{ matrix.shardIndex }}
-          SHARD_TOTAL: ${{ matrix.shardTotal }}
         run: |
           echo "GitHub run attempt: ${{ github.run_attempt }}"
 
@@ -49,50 +46,48 @@ jobs:
           if [[ "${{ github.run_attempt }}" -gt 1 ]]; then
             echo "Detected re-run. Executing only last failed tests via TestDino."
 
-            npx tdpw last-failed --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }} > last-failed-flags.txt
-            EXTRA_PW_FLAGS="$(cat last-failed-flags.txt)"
+            FAILED_TESTS=$(testdino last-failed --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }} --token="$TESTDINO_TOKEN" -v)
 
-            if [[ -z "$EXTRA_PW_FLAGS" ]]; then
+            if [[ -z "$FAILED_TESTS" ]]; then
               echo "No failed tests found. Exiting."
               exit 0
             fi
 
-            echo "Running failed tests without sharding:"
-            echo "$EXTRA_PW_FLAGS"
-
-            # IMPORTANT: preserve quotes
-            eval "npx playwright test $EXTRA_PW_FLAGS"
+            echo "Running failed tests: $FAILED_TESTS"
+            pytest $FAILED_TESTS \
+              --playwright-json=test-results/rerun-report.json \
+              --html=test-results/rerun-index.html \
+              --self-contained-html
             exit 0
           fi
 
           # Case 2: Normal execution (first run)
           echo "Running all Playwright tests"
-          npx playwright test \
-            --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+          pytest tests/ \
+            --playwright-json=test-results/report.json \
+            --html=test-results/index.html \
+            --self-contained-html \
+            -p no:selenium
 
-      - name: Upload HTML report
-        if: ${{ !cancelled() }}
+      - name: Upload test artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-${{ matrix.shardIndex }}
-          path: ./playwright-report
+          name: test-results-${{ matrix.shardIndex }}
+          path: test-results/
           retention-days: 14
 
-      - name: Cache tdpw last failed metadata
+      - name: Cache test metadata
         if: always()
         env:
           TESTDINO_TOKEN: ${{ secrets.TESTDINO_TOKEN }}
-          TESTDINO_API_URL: ${{ env.TESTDINO_API_URL }}
-          SHARD_INDEX: ${{ matrix.shardIndex }}
-          SHARD_TOTAL: ${{ matrix.shardTotal }}
-        run: npx tdpw cache --verbose
+        run: testdino cache --working-dir test-results --token="$TESTDINO_TOKEN" -v
 
       - name: Upload test results to TestDino
         if: always()
         env:
           TESTDINO_TOKEN: ${{ secrets.TESTDINO_TOKEN }}
-          TESTDINO_API_URL: ${{ env.TESTDINO_API_URL }}
-        run: npx tdpw upload --verbose
+        run: testdino upload test-results --token="$TESTDINO_TOKEN" -v
 
   playwright-tests-succeeded:
     name: Check Playwright Tests Status
