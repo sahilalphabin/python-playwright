@@ -87,6 +87,13 @@ jobs:
           SHARD_TOTAL: ${{ matrix.shardTotal }}
         run: npx tdpw cache --verbose
 
+      - name: Upload test results to TestDino
+        if: always()
+        env:
+          TESTDINO_TOKEN: ${{ secrets.TESTDINO_TOKEN }}
+          TESTDINO_API_URL: ${{ env.TESTDINO_API_URL }}
+        run: npx tdpw upload --verbose
+
   playwright-tests-succeeded:
     name: Check Playwright Tests Status
     if: ${{ always() }}
