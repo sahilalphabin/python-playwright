@@ -11,7 +11,6 @@ jobs:
 
     env:
       TESTDINO_TOKEN: ${{ secrets.TESTDINO_TOKEN }}
-      TESTDINO_TARGET_ENV: staging
 
     strategy:
       fail-fast: false
@@ -78,11 +77,10 @@ jobs:
         if: always()
         env:
           TESTDINO_TOKEN: ${{ secrets.TESTDINO_TOKEN }}
-          TESTDINO_TARGET_ENV: staging
         run: |
           if [ -n "$TESTDINO_TOKEN" ]; then
             testdino cache --working-dir test-results --token="$TESTDINO_TOKEN" -v
-            testdino upload test-results --token="$TESTDINO_TOKEN" -v
+            testdino upload test-results --environment="staging" --token="$TESTDINO_TOKEN" -v
           else
             echo "TESTDINO_TOKEN not set, skipping TestDino integration"
           fi
