@@ -5,14 +5,35 @@ on:
   pull_request:
   workflow_dispatch:
 
-
 jobs:
-  test:
+  setup:
     runs-on: ubuntu-latest
-    environment: TESTDINO_TOKEN
-
+    outputs:
+      environment: ${{ steps.env-mapping.outputs.environment }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Determine environment from branch
+        id: env-mapping
+        run: |
+          case "${{ github.ref_name }}" in
+            main|master)
+              echo "environment=production" >> $GITHUB_OUTPUT
+              ;;
+            develop|dev)
+              echo "environment=staging" >> $GITHUB_OUTPUT
+              ;;
+            release/*)
+              echo "environment=pre-production" >> $GITHUB_OUTPUT
+              ;;
+            feature/*|fix/*|hotfix/*)
+              echo "environment=development" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "environment=development" >> $GITHUB_OUTPUT
+              ;;
+          esac
+          echo "Branch: ${{ github.ref_name }} -> Environment: $(cat $GITHUB_OUTPUT | grep environment | cut -d'=' -f2)"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -41,7 +62,31 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: playwright install-deps
 
-      # Step 1: Run ALL tests
+  run-tests:
+    runs-on: ubuntu-latest
+    needs: setup
+    environment: TESTDINO_TOKEN
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-v1
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-playwright pytest-xdist pytest-timeout pytest-html pytest-rerunfailures
+          pip install pytest-playwright-json
+          pip install packages/testdino-1.0.23-py3-none-any.whl
+
       - name: Run all tests
         run: |
           pytest tests/ \
@@ -52,15 +97,67 @@ jobs:
             --timeout=30 \
             -v || true
 
-      # Step 2: Cache test metadata
-      - name: Cache test metadata
+      - name: Upload test artifacts
         if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results/
+          retention-days: 30
+
+  cache-metadata:
+    runs-on: ubuntu-latest
+    needs: [setup, run-tests]
+    if: always()
+    environment: TESTDINO_TOKEN
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install testdino
+        run: |
+          python -m pip install --upgrade pip
+          pip install packages/testdino-1.0.23-py3-none-any.whl
+
+      - name: Download test artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: test-results
+          path: test-results/
+
+      - name: Cache test metadata
         run: |
           testdino cache --working-dir test-results --token="${{ secrets.TESTDINO_TOKEN }}" -v
 
-      # Step 3: Log failed test count
+  upload-results:
+    runs-on: ubuntu-latest
+    needs: [setup, run-tests]
+    if: always()
+    environment: TESTDINO_TOKEN
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install testdino
+        run: |
+          python -m pip install --upgrade pip
+          pip install packages/testdino-1.0.23-py3-none-any.whl
+
+      - name: Download test artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: test-results
+          path: test-results/
+
       - name: Log failed test count
-        if: always()
         run: |
           if [ -f test-results/report.json ]; then
             FAILED_COUNT=$(python -c "import json; data = json.load(open('test-results/report.json')); print(data.get('stats', {}).get('unexpected', 0))")
@@ -70,62 +167,88 @@ jobs:
             echo "::warning::test-results/report.json not found"
           fi
 
-      # Step 4: Upload report to TestDino
       - name: Upload to TestDino
-        if: always()
         env:
           TESTDINO_TOKEN: ${{ secrets.TESTDINO_TOKEN }}
         run: |
           if [ -n "$TESTDINO_TOKEN" ]; then
             testdino upload test-results \
               --json-report test-results/report.json \
+              --environment="${{ needs.setup.outputs.environment }}" \
               -v
           else
             echo "Skipping upload - TESTDINO_TOKEN not set"
           fi
 
-      # Step 5: Get last failed and rerun only those
-      - name: Get last failed tests
-        if: always()
+  rerun-failed:
+    runs-on: ubuntu-latest
+    needs: [setup, cache-metadata, upload-results]
+    if: always()
+    environment: TESTDINO_TOKEN
+    strategy:
+      matrix:
+        shard: [1, 2, 3, 4, 5]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-v1
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-playwright pytest-xdist pytest-timeout pytest-html pytest-rerunfailures
+          pip install pytest-playwright-json
+          pip install packages/testdino-1.0.23-py3-none-any.whl
+
+      - name: Get last failed tests for shard
         id: last_failed
         run: |
-          FAILED_TESTS=$(testdino last-failed --token="${{ secrets.TESTDINO_TOKEN }}" 2>/dev/null) || true
-          echo "Filter: $FAILED_TESTS"
+          FAILED_TESTS=$(testdino last-failed --shard="${{ matrix.shard }}/5" --token="${{ secrets.TESTDINO_TOKEN }}" 2>/dev/null) || true
+          echo "Filter for shard ${{ matrix.shard }}/5: $FAILED_TESTS"
           echo "args=$FAILED_TESTS" >> $GITHUB_OUTPUT
 
-      - name: Rerun failed tests only
-        if: always()
+      - name: Rerun failed tests for shard
+        if: steps.last_failed.outputs.args != ''
         run: |
-            echo "Rerunning failed tests with: ${{ steps.last_failed.outputs.args }}"
+            echo "Rerunning shard ${{ matrix.shard }}/5 failed tests with: ${{ steps.last_failed.outputs.args }}"
             pytest tests/ \
               ${{ steps.last_failed.outputs.args }} \
-              --playwright-json=test-results/rerun-report.json \
-              --html=test-results/rerun-index.html \
+              --playwright-json=test-results/shard-${{ matrix.shard }}-rerun-report.json \
+              --html=test-results/shard-${{ matrix.shard }}-rerun-index.html \
               --self-contained-html \
-              -n=10 \
               --timeout=30 \
               -v || true
 
-      - name: Cache rerun metadata
-        if: always()
+      - name: Cache rerun metadata for shard
+        if: steps.last_failed.outputs.args != ''
         run: |
           testdino cache --working-dir test-results --token="${{ secrets.TESTDINO_TOKEN }}" -v
 
-      - name: Upload rerun report to TestDino
-        if: always()
+      - name: Upload rerun report for shard
+        if: steps.last_failed.outputs.args != ''
         env:
           TESTDINO_TOKEN: ${{ secrets.TESTDINO_TOKEN }}
         run: |
-          if [ -n "$TESTDINO_TOKEN" ] && [ -f test-results/rerun-report.json ]; then
+          if [ -n "$TESTDINO_TOKEN" ] && [ -f test-results/shard-${{ matrix.shard }}-rerun-report.json ]; then
             testdino upload test-results \
-              --json-report test-results/rerun-report.json \
+              --json-report test-results/shard-${{ matrix.shard }}-rerun-report.json \
+              --environment="${{ needs.setup.outputs.environment }}-shard-${{ matrix.shard }}" \
               -v
           fi
 
-      - name: Upload test artifacts
+      - name: Upload shard rerun artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results
+          name: shard-${{ matrix.shard }}-rerun-results
           path: test-results/
           retention-days: 30
