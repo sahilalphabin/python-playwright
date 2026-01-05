@@ -11,6 +11,7 @@ jobs:
 
     env:
       TESTDINO_TOKEN: ${{ secrets.TESTDINO_TOKEN }}
+      TESTDINO_TARGET_ENV: STAGING
 
     strategy:
       fail-fast: false
@@ -30,19 +31,40 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest pytest-playwright pytest-playwright-json pytest-html
+          pip install pytest pytest-playwright pytest-playwright-json pytest-html pytest-xdist
           pip install packages/testdino-1.0.23-py3-none-any.whl
           playwright install --with-deps chromium
 
       - name: Run tests
         run: |
           mkdir -p test-results
-          pytest tests/ \
-            --playwright-json=test-results/report.json \
-            --html=test-results/index.html \
-            --self-contained-html \
-            -p no:selenium \
-            -v
+          
+          # Check if this is a rerun
+          if [[ "${{ github.run_attempt }}" -gt 1 ]] && [ -n "$TESTDINO_TOKEN" ]; then
+            echo "Rerun detected - getting failed tests for shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}"
+            FAILED_TESTS=$(testdino last-failed --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }} --token="$TESTDINO_TOKEN" -v)
+            
+            if [[ -n "$FAILED_TESTS" ]]; then
+              echo "Running failed tests: $FAILED_TESTS"
+              pytest $FAILED_TESTS \
+                --playwright-json=test-results/report.json \
+                --html=test-results/index.html \
+                --self-contained-html \
+                -p no:selenium \
+                -v
+            else
+              echo "No failed tests found for this shard"
+              exit 0
+            fi
+          else
+            echo "First run - running all tests with sharding"
+            pytest tests/ \
+              --playwright-json=test-results/report.json \
+              --html=test-results/index.html \
+              --self-contained-html \
+              -p no:selenium \
+              -v
+          fi
 
       - name: Upload artifacts
         if: always()
@@ -56,10 +78,11 @@ jobs:
         if: always()
         env:
           TESTDINO_TOKEN: ${{ secrets.TESTDINO_TOKEN }}
+          TESTDINO_TARGET_ENV: STAGING
         run: |
           if [ -n "$TESTDINO_TOKEN" ]; then
             testdino cache --working-dir test-results --token="$TESTDINO_TOKEN" -v
-            testdino upload test-results --token="$TESTDINO_TOKEN" -v
+            testdino upload test-results --environment=STAGING --token="$TESTDINO_TOKEN" -v
           else
             echo "TESTDINO_TOKEN not set, skipping TestDino integration"
           fi
