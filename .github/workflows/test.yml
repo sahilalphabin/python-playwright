@@ -33,7 +33,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest pytest-playwright pytest-xdist pytest-timeout pytest-html pytest-rerunfailures
           pip install pytest-playwright-json
-          pip install testdino
+          pip install packages/testdino-1.0.23-py3-none-any.whl
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
