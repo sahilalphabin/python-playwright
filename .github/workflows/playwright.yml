@@ -54,9 +54,10 @@ jobs:
             fi
 
             # IMPORTANT: Use eval to preserve quotes in the -k expression
-            # This matches the JavaScript workflow pattern and ensures quotes are preserved
+            # pytest-shard uses 0-indexed shard IDs, so subtract 1 from SHARD_INDEX
             # Use shard-specific report name
-            eval "pytest $FAILED_TESTS --playwright-json=test-results/report-${{ matrix.shardIndex }}.json --html=test-results/index.html --self-contained-html -p no:selenium -v" || true
+            SHARD_ID=$(( $SHARD_INDEX - 1 ))
+            eval "pytest $FAILED_TESTS --shard-id=$SHARD_ID --num-shards=$SHARD_TOTAL --playwright-json=test-results/report-${{ matrix.shardIndex }}.json --html=test-results/index.html --self-contained-html -p no:selenium -v" || true
             exit 0
           fi
 
