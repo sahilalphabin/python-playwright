@@ -136,11 +136,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: test-results-*
-          merge-multiple: true
+          merge-multiple: false
           path: combined-test-results
 
       - name: Merge JSON reports from all shards
         run: |
+          # When merge-multiple: false, each artifact is in its own subdirectory
+          # Find all report.json files from all shard artifacts
           python3 -m pytest_playwright_json.merge -d combined-test-results -o combined-test-results/report.json -v
 
       - name: Upload to TestDino
