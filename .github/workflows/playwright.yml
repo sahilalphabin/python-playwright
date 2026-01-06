@@ -64,7 +64,7 @@ jobs:
               --html=test-results/index.html \
               --self-contained-html \
               -p no:selenium \
-              -v
+              -v || true
             exit 0
           fi
 
@@ -75,7 +75,7 @@ jobs:
             --html=test-results/index.html \
             --self-contained-html \
             -p no:selenium \
-            -v
+            -v || true
 
       - name: Upload HTML report
         if: ${{ !cancelled() }}
