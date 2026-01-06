@@ -65,7 +65,11 @@ jobs:
             echo "Running failed tests without sharding:"
             echo "$FAILED_TESTS"
 
-            pytest tests/ $FAILED_TESTS \
+            echo "=== DEBUG: Full pytest command ==="
+            echo "pytest tests/ \"$FAILED_TESTS\" --playwright-json=test-results/report.json --html=test-results/index.html --self-contained-html -p no:selenium -v"
+            echo "=== END DEBUG ==="
+
+            pytest tests/ "$FAILED_TESTS" \
               --playwright-json=test-results/report.json \
               --html=test-results/index.html \
               --self-contained-html \
