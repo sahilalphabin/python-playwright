@@ -66,10 +66,10 @@ jobs:
             echo "$FAILED_TESTS"
 
             echo "=== DEBUG: Full pytest command ==="
-            echo "pytest tests/ \"$FAILED_TESTS\" --playwright-json=test-results/report.json --html=test-results/index.html --self-contained-html -p no:selenium -v"
+            echo "pytest $FAILED_TESTS --playwright-json=test-results/report.json --html=test-results/index.html --self-contained-html -p no:selenium -v"
             echo "=== END DEBUG ==="
 
-            pytest tests/ "$FAILED_TESTS" \
+            pytest $FAILED_TESTS \
               --playwright-json=test-results/report.json \
               --html=test-results/index.html \
               --self-contained-html \
@@ -80,7 +80,7 @@ jobs:
 
           # Case 2: Normal execution (first run)
           echo "Running all Playwright tests"
-          pytest tests/ \
+          pytest \
             --playwright-json=test-results/report.json \
             --html=test-results/index.html \
             --self-contained-html \
