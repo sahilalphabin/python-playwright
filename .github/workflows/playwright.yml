@@ -48,8 +48,14 @@ jobs:
           if [[ "${{ github.run_attempt }}" -gt 1 ]]; then
             echo "Detected re-run. Executing only last failed tests via TestDino."
 
-            testdino last-failed --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }} --token="$TESTDINO_TOKEN" > last-failed-flags.txt 2>/dev/null
+            testdino last-failed --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }} --token="$TESTDINO_TOKEN" -v > last-failed-flags.txt
             FAILED_TESTS="$(cat last-failed-flags.txt | tail -1)"
+
+            echo "=== DEBUG: Full testdino output ==="
+            cat last-failed-flags.txt
+            echo "=== DEBUG: Extracted FAILED_TESTS ==="
+            echo "$FAILED_TESTS"
+            echo "=== END DEBUG ==="
 
             if [[ -z "$FAILED_TESTS" ]]; then
               echo "No failed tests found. Exiting."
@@ -59,7 +65,7 @@ jobs:
             echo "Running failed tests without sharding:"
             echo "$FAILED_TESTS"
 
-            pytest $FAILED_TESTS \
+            pytest tests/ $FAILED_TESTS \
               --playwright-json=test-results/report.json \
               --html=test-results/index.html \
               --self-contained-html \
