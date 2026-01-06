@@ -121,10 +121,10 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install testdino
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install testdino
+          pip install testdino pytest-playwright-json
 
       - name: Download all test results
         uses: actions/download-artifact@v4
@@ -135,94 +135,7 @@ jobs:
 
       - name: Merge JSON reports from all shards
         run: |
-          cat > merge_reports.py << 'SCRIPT_EOF'
-          import json
-          from pathlib import Path
-          from datetime import datetime
-          
-          combined_dir = Path("combined-test-results")
-          json_reports = list(combined_dir.rglob("report.json"))
-          
-          if not json_reports:
-              print("No report.json files found")
-              exit(1)
-          
-          print(f"Found {len(json_reports)} JSON reports to merge")
-          
-          all_suites = []
-          all_errors = []
-          all_stats = {
-              "total": 0,
-              "passed": 0,
-              "failed": 0,
-              "skipped": 0,
-              "flaky": 0,
-              "expected": 0,
-              "unexpected": 0,
-              "duration": 0.0
-          }
-          config = None
-          metadata = None
-          earliest_start_time = None
-          
-          for report_path in json_reports:
-              with open(report_path, "r") as f:
-                  data = json.load(f)
-                  
-                  if config is None:
-                      config = data.get("config", {})
-                      if "shard" in config:
-                          del config["shard"]
-                  
-                  if "suites" in data and isinstance(data["suites"], list):
-                      all_suites.extend(data["suites"])
-                  
-                  if "errors" in data and isinstance(data["errors"], list):
-                      all_errors.extend(data["errors"])
-                  
-                  if "stats" in data:
-                      stats = data["stats"]
-                      all_stats["total"] += stats.get("total", 0)
-                      all_stats["passed"] += stats.get("passed", 0)
-                      all_stats["failed"] += stats.get("failed", 0)
-                      all_stats["skipped"] += stats.get("skipped", 0)
-                      all_stats["flaky"] += stats.get("flaky", 0)
-                      all_stats["expected"] += stats.get("expected", 0)
-                      all_stats["unexpected"] += stats.get("unexpected", 0)
-                      all_stats["duration"] += stats.get("duration", 0.0)
-                      
-                      start_time = stats.get("startTime")
-                      if start_time:
-                          if earliest_start_time is None or start_time < earliest_start_time:
-                              earliest_start_time = start_time
-                  
-                  if metadata is None and "metadata" in data:
-                      metadata = data.get("metadata")
-          
-          if earliest_start_time:
-              all_stats["startTime"] = earliest_start_time
-          else:
-              all_stats["startTime"] = datetime.now().isoformat()
-          
-          merged_report = {
-              "config": config or {},
-              "suites": all_suites,
-              "stats": all_stats,
-              "errors": all_errors
-          }
-          
-          if metadata:
-              merged_report["metadata"] = metadata
-          
-          output_path = combined_dir / "report.json"
-          with open(output_path, "w") as f:
-              json.dump(merged_report, f, indent=2)
-          
-          print(f"✅ Merged {len(json_reports)} reports into {output_path}")
-          print(f"📊 Total tests: {all_stats['total']} (passed: {all_stats['passed']}, failed: {all_stats['failed']}, skipped: {all_stats['skipped']}, flaky: {all_stats['flaky']})")
-          print(f"⏱️  Total duration: {all_stats['duration']:.2f}s")
-          SCRIPT_EOF
-          python3 merge_reports.py
+          pytest-playwright-json-merge -d combined-test-results -o combined-test-results/report.json -v
 
       - name: Upload to TestDino
         env:
