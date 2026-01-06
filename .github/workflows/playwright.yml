@@ -101,3 +101,44 @@ jobs:
           else
             exit 1
           fi
+
+  upload-to-testdino:
+    name: Upload Test Results to TestDino
+    if: ${{ always() }}
+    needs:
+      - run-playwright-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install testdino
+        run: |
+          python -m pip install --upgrade pip
+          pip install testdino
+
+      - name: Download all test results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: test-results-*
+          merge-multiple: true
+          path: combined-test-results
+
+      - name: Upload to TestDino
+        env:
+          TESTDINO_TOKEN: ${{ secrets.TESTDINO_TOKEN }}
+        run: |
+          if [ -z "$TESTDINO_TOKEN" ]; then
+            echo "TESTDINO_TOKEN not set, skipping upload"
+            exit 0
+          fi
+          if [ -d "combined-test-results" ] && [ -n "$(ls -A combined-test-results 2>/dev/null)" ]; then
+            testdino upload ./combined-test-results --token="$TESTDINO_TOKEN" --upload-full-json
+          else
+            echo "No test results found to upload"
+          fi
