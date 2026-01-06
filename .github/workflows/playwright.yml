@@ -65,7 +65,6 @@ jobs:
             --html=test-results/index.html \
             --self-contained-html \
             -p no:selenium \
-            --environment="v1.0.23" \
             -v || true
 
       - name: Upload HTML report
