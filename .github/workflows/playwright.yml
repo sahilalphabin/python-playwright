@@ -42,32 +42,16 @@ jobs:
           SHARD_TOTAL: ${{ matrix.shardTotal }}
         run: |
           mkdir -p test-results
-          echo "GitHub run attempt: ${{ github.run_attempt }}"
 
           # Case 1: Re-run failed jobs → run only failed tests
           if [[ "${{ github.run_attempt }}" -gt 1 ]]; then
-            echo "Detected re-run. Executing only last failed tests via TestDino."
 
-            testdino last-failed --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }} --token="$TESTDINO_TOKEN" -v > last-failed-flags.txt
+            testdino last-failed --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }} --token="$TESTDINO_TOKEN" > last-failed-flags.txt
             FAILED_TESTS="$(cat last-failed-flags.txt | tail -1)"
 
-            echo "=== DEBUG: Full testdino output ==="
-            cat last-failed-flags.txt
-            echo "=== DEBUG: Extracted FAILED_TESTS ==="
-            echo "$FAILED_TESTS"
-            echo "=== END DEBUG ==="
-
             if [[ -z "$FAILED_TESTS" ]]; then
-              echo "No failed tests found. Exiting."
               exit 0
             fi
-
-            echo "Running failed tests without sharding:"
-            echo "$FAILED_TESTS"
-
-            echo "=== DEBUG: Full pytest command ==="
-            echo "pytest $FAILED_TESTS --playwright-json=test-results/report.json --html=test-results/index.html --self-contained-html -p no:selenium -v"
-            echo "=== END DEBUG ==="
 
             # IMPORTANT: Use eval to preserve quotes in the -k expression
             # This matches the JavaScript workflow pattern and ensures quotes are preserved
@@ -76,7 +60,6 @@ jobs:
           fi
 
           # Case 2: Normal execution (first run)
-          echo "Running all Playwright tests"
           pytest \
             --playwright-json=test-results/report.json \
             --html=test-results/index.html \
@@ -100,9 +83,7 @@ jobs:
           SHARD_TOTAL: ${{ matrix.shardTotal }}
         run: |
           if [ -n "$TESTDINO_TOKEN" ]; then
-            testdino cache --working-dir test-results --token="$TESTDINO_TOKEN" -v
-          else
-            echo "TESTDINO_TOKEN not set, skipping cache"
+            testdino cache --working-dir test-results --token="$TESTDINO_TOKEN"
           fi
 
   playwright-tests-succeeded:
