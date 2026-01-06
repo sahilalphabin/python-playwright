@@ -55,17 +55,19 @@ jobs:
 
             # IMPORTANT: Use eval to preserve quotes in the -k expression
             # This matches the JavaScript workflow pattern and ensures quotes are preserved
-            eval "pytest $FAILED_TESTS --playwright-json=test-results/report.json --html=test-results/index.html --self-contained-html -p no:selenium -v" || true
+            # Use shard-specific report name
+            eval "pytest $FAILED_TESTS --playwright-json=test-results/report-${{ matrix.shardIndex }}.json --html=test-results/index.html --self-contained-html -p no:selenium -v" || true
             exit 0
           fi
 
           # Case 2: Normal execution (first run) with sharding
           # pytest-shard uses 0-indexed shard IDs, so subtract 1 from SHARD_INDEX
           SHARD_ID=$(( $SHARD_INDEX - 1 ))
+          # Use shard-specific report name to prevent overwriting when artifacts are merged
           pytest \
             --shard-id=$SHARD_ID \
             --num-shards=$SHARD_TOTAL \
-            --playwright-json=test-results/report.json \
+            --playwright-json=test-results/report-${{ matrix.shardIndex }}.json \
             --html=test-results/index.html \
             --self-contained-html \
             -p no:selenium \
@@ -136,13 +138,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: test-results-*
-          merge-multiple: false
+          merge-multiple: true
           path: combined-test-results
 
       - name: Merge JSON reports from all shards
         run: |
-          # When merge-multiple: false, each artifact is in its own subdirectory
-          # Find all report.json files from all shard artifacts
           python3 -m pytest_playwright_json.merge -d combined-test-results -o combined-test-results/report.json -v
 
       - name: Upload to TestDino
