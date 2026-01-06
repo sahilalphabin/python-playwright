@@ -124,7 +124,13 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install testdino pytest-playwright-json
+          pip install testdino
+          # Install local pytest-playwright-json package with merge command
+          if [ -f packages/pytest_playwright_json-*.whl ]; then
+            pip install packages/pytest_playwright_json-*.whl
+          else
+            pip install pytest-playwright-json
+          fi
 
       - name: Download all test results
         uses: actions/download-artifact@v4
@@ -135,7 +141,7 @@ jobs:
 
       - name: Merge JSON reports from all shards
         run: |
-          pytest-playwright-json-merge -d combined-test-results -o combined-test-results/report.json -v
+          python3 -m pytest_playwright_json.merge -d combined-test-results -o combined-test-results/report.json -v
 
       - name: Upload to TestDino
         env:
