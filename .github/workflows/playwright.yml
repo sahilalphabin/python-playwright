@@ -69,12 +69,9 @@ jobs:
             echo "pytest $FAILED_TESTS --playwright-json=test-results/report.json --html=test-results/index.html --self-contained-html -p no:selenium -v"
             echo "=== END DEBUG ==="
 
-            pytest $FAILED_TESTS \
-              --playwright-json=test-results/report.json \
-              --html=test-results/index.html \
-              --self-contained-html \
-              -p no:selenium \
-              -v || true
+            # IMPORTANT: Use eval to preserve quotes in the -k expression
+            # This matches the JavaScript workflow pattern and ensures quotes are preserved
+            eval "pytest $FAILED_TESTS --playwright-json=test-results/report.json --html=test-results/index.html --self-contained-html -p no:selenium -v" || true
             exit 0
           fi
 
@@ -93,7 +90,7 @@ jobs:
         with:
           name: test-results-${{ matrix.shardIndex }}
           path: test-results/
-          retention-days: 14
+          retention-days: 1
 
       - name: Cache testdino last failed metadata
         if: always()
