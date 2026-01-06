@@ -138,7 +138,9 @@ jobs:
             exit 0
           fi
           if [ -d "combined-test-results" ] && [ -n "$(ls -A combined-test-results 2>/dev/null)" ]; then
-            testdino upload ./combined-test-results --token="$TESTDINO_TOKEN" --upload-full-json
+            # Basic upload - uploads JSON report (required)
+            # No upload flags = no strict validation, works even if attachments don't exist
+            testdino upload ./combined-test-results --token="$TESTDINO_TOKEN"
           else
             echo "No test results found to upload"
           fi
