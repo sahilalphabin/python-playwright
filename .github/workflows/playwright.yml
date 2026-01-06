@@ -48,8 +48,8 @@ jobs:
           if [[ "${{ github.run_attempt }}" -gt 1 ]]; then
             echo "Detected re-run. Executing only last failed tests via TestDino."
 
-            testdino last-failed --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }} --token="$TESTDINO_TOKEN" -v > last-failed-flags.txt
-            FAILED_TESTS="$(cat last-failed-flags.txt)"
+            testdino last-failed --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }} --token="$TESTDINO_TOKEN" > last-failed-flags.txt 2>/dev/null
+            FAILED_TESTS="$(cat last-failed-flags.txt | tail -1)"
 
             if [[ -z "$FAILED_TESTS" ]]; then
               echo "No failed tests found. Exiting."
